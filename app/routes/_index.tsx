@@ -9,7 +9,7 @@ import { saveFrameUrl } from "~/lib/db";
 import { wrapUrl } from "~/lib/utils";
 
 function isValidUrl(url: string) {
-  const urlPattern = /^https:\/\/([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/
+  const urlPattern = /^https:\/\/([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/;
   return urlPattern.test(url);
 }
 
@@ -56,45 +56,56 @@ const LinkButton: React.FC<{ text: string }> = ({ text }) => {
       setCopied(false);
     }, 3000);
   };
+
   return (
     <button
-      className="flex justify-between items-center px-4 bg-white p-4 rounded-md shadow-sm border-lg outline-none focus-none text-left"
+      className="flex justify-between items-center w-full px-4 bg-white p-4 rounded-md shadow-sm border-lg outline-none focus:outline-blue-500 text-left"
       onClick={onCopy}
     >
-      <p className="text-blue-500 text-sm w-9/12">{text}</p>
-
-      {copied ? (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className="text-gray-500"
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M20 6 9 17l-5-5" />
-        </svg>
-      ) : (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className="text-gray-500"
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-          <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-        </svg>
-      )}
+      <div className="flex items-center w-full">
+        <p className="text-blue-500 text-sm font-medium mr-2 truncate flex-1">
+          {text}
+        </p>
+        <div className="flex items-center">
+          {copied && (
+            <span className="text-gray-500 text-sm whitespace-nowrap mr-2">
+              Copied!
+            </span>
+          )}
+          {copied ? (
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="text-gray-500"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          ) : (
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="text-gray-500"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+            </svg>
+          )}
+        </div>
+      </div>
     </button>
   );
 };
@@ -188,13 +199,14 @@ export default function Index() {
         <div className="w-full max-w-md p-4 bg-gray-50 rounded-md shadow-md">
           <div className="space-y-2 text-sm text-gray-600">
             {actionData.message && (
-              //show error
+              // show error
               <p>{actionData.message}</p>
             )}
-            {
-              //show success
-              actionData.url && <LinkButton text={actionData.url} />
-            }
+            {actionData.url && (
+              <div className="w-full">
+                <LinkButton text={actionData.url} />
+              </div>
+            )}
           </div>
         </div>
       )}

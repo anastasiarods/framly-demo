@@ -11,8 +11,8 @@ import {
   validateFrameMessage,
 } from "frames.js";
 import { wrapLinksInFrame } from "~/lib/utils";
-import { captureEvent, identifyUser } from "./posthog";
 import { fetchHubContext } from "~/lib/frameUtils.server";
+import { captureEvent, identifyUser } from "./posthog";
 
 interface TrackPayload {
   body: FrameActionPayload;
