@@ -23,3 +23,16 @@ export async function saveUrl(kv: KVNamespace, url: string) {
   await kv.put(id, url);
   return id;
 }
+
+export async function getFrameUrlId(kv: KVNamespace, url: string) {
+  let id;
+  id = await kv.get(url);
+
+  if (!id) {
+    id = nanoid(8);
+    await kv.put(id, url);
+    await kv.put(url, id);
+  }
+
+  return id;
+}

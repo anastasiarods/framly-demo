@@ -14,16 +14,6 @@ import { wrapLinksInFrame } from "~/lib/utils";
 import { fetchHubContext } from "~/lib/frameUtils.server";
 import { captureEvent, identifyUser } from "./posthog";
 
-interface TrackPayload {
-  body: FrameActionPayload;
-  postUrl: string;
-  frameUrl: string;
-  apiKey: string;
-  region: string;
-  link?: string;
-  prevButtons?: { label: string }[];
-}
-
 interface TrackParams {
   kv: KVNamespace;
   body: FrameActionPayload;
@@ -32,66 +22,6 @@ interface TrackParams {
   redirectUrl: string;
   newFrame?: Frame;
   link?: string;
-}
-
-async function trackFrameAction({
-  body,
-  postUrl,
-  apiKey,
-  region,
-  frameUrl,
-  prevButtons,
-}: TrackPayload) {
-  const { fid, castId, buttonIndex, inputText } = body.untrustedData;
-  const castUrl = `https://warpcast.com/~/conversations/${castId.hash}`;
-  const button = prevButtons ? prevButtons[buttonIndex - 1] : null;
-
-  return await captureEvent({
-    region,
-    apiKey,
-    distinctId: fid.toString(),
-    eventName: "frame_click",
-    properties: {
-      castHash: castId.hash,
-      buttonIndex: buttonIndex.toString(),
-      castUrl: castUrl,
-      buttonLabel: button?.label,
-      postUrl,
-      inputText,
-      frameUrl,
-    },
-  });
-}
-
-async function trackExternalLink({
-  body,
-  link,
-  postUrl,
-  apiKey,
-  region,
-  frameUrl,
-  prevButtons,
-}: TrackPayload) {
-  const { fid, castId, buttonIndex, inputText } = body.untrustedData;
-  const castUrl = `https://warpcast.com/~/conversations/${castId.hash}`;
-  const button = prevButtons ? prevButtons[buttonIndex - 1] : null;
-
-  return await captureEvent({
-    region,
-    apiKey,
-    distinctId: fid.toString(),
-    eventName: "frame_redirect",
-    properties: {
-      castHash: castId.hash,
-      castUrl: castUrl,
-      buttonIndex: buttonIndex.toString(),
-      buttonLabel: button?.label,
-      postUrl,
-      frameUrl,
-      redirectUrl: link,
-      inputText,
-    },
-  });
 }
 
 async function identify({
@@ -106,7 +36,6 @@ async function identify({
   region: string;
 }) {
   const { isValid, message } = await validateFrameMessage(body);
-
   const fid = message?.data.fid;
   const cast = message?.data.frameActionBody.castId;
 
@@ -154,16 +83,19 @@ async function track({
 }: TrackParams) {
   const region = await kv.get(`${id}:region`);
   const apiKey = await kv.get(`${id}:apiKey`);
-  const postUrl = await kv.get(`${id}`);
+  const frameUrl = await kv.get(`${id}`);
   const firstFrameId = await kv.get(`${id}:firstFrame`);
   const { message, isValid } = await validateFrameMessage(body);
   const fid = message?.data.fid;
+  const { castId, buttonIndex, inputText, network, address } =
+    body.untrustedData;
+  const castUrl = `https://warpcast.com/~/conversations/${castId.hash}`;
 
   if (!region || !apiKey || !isValid || !fid) {
     return;
   }
 
-  console.log("Tracking action for: ", id, postUrl);
+  console.log("Tracking action for: ", id, frameUrl);
 
   try {
     const session = await kv.get(`${fid}:data`);
@@ -186,35 +118,68 @@ async function track({
   }
 
   const prevButtons = JSON.parse(session || "[]");
+  const button = prevButtons ? prevButtons[buttonIndex - 1] : null;
 
   if (newFrame && newFrame.buttons)
     await kv.put(`${id}:${fid}`, JSON.stringify(newFrame.buttons));
 
   if (link) {
-    const resp = await trackExternalLink({
-      body,
-      link,
-      postUrl: redirectUrl,
-      frameUrl: postUrl || "",
-      apiKey,
+    const resp = await captureEvent({
       region,
-      prevButtons,
+      apiKey,
+      distinctId: fid.toString(),
+      eventName: "frame_redirect",
+      properties: {
+        castHash: castId.hash,
+        buttonIndex: buttonIndex.toString(),
+        buttonLabel: button?.label,
+        postUrl: redirectUrl,
+        castUrl,
+        frameUrl,
+        redirectUrl: link,
+        inputText,
+      },
     });
 
     //@ts-expect-error - resp is not used
     if (!resp?.status) console.error("Error tracking external link", id);
-  } else {
-    const resp = await trackFrameAction({
-      body,
-      postUrl: redirectUrl,
-      apiKey,
+  } else if (newFrame) {
+    const resp = await captureEvent({
       region,
-      frameUrl: postUrl || "",
-      prevButtons,
+      apiKey,
+      distinctId: fid.toString(),
+      eventName: "frame_click",
+      properties: {
+        castHash: castId.hash,
+        buttonIndex: buttonIndex.toString(),
+        buttonLabel: button?.label,
+        postUrl: redirectUrl,
+        castUrl,
+        inputText,
+        frameUrl,
+      },
     });
 
     //@ts-expect-error - resp is not used
     if (!resp?.status) console.error("Error tracking frame action", id);
+  } else if (address) {
+    await captureEvent({
+      region,
+      apiKey,
+      distinctId: fid.toString(),
+      eventName: "frame_tx",
+      properties: {
+        castHash: castId.hash,
+        buttonIndex: buttonIndex.toString(),
+        buttonLabel: button?.label,
+        postUrl: redirectUrl,
+        castUrl,
+        inputText,
+        network,
+        address,
+        frameUrl,
+      },
+    });
   }
 }
 
@@ -227,6 +192,7 @@ const actionRequest = async ({ request, context }: ActionFunctionArgs) => {
     const nextId = requestUrl.searchParams.get("n");
     const id = requestUrl.searchParams.get("r");
     const redirectUrl = await kv.get(nextId ?? "");
+    let newFrame;
 
     if (!redirectUrl || !id) {
       return new Response("Invalid request", { status: 400 });
@@ -242,9 +208,7 @@ const actionRequest = async ({ request, context }: ActionFunctionArgs) => {
       body: JSON.stringify(body),
     });
 
-    const html = await response.text();
-    const frame = getFrame({ htmlString: html, url: redirectUrl });
-
+    // post_url button
     if (response.redirected) {
       //track redirect
       context.cloudflare.waitUntil(
@@ -264,43 +228,66 @@ const actionRequest = async ({ request, context }: ActionFunctionArgs) => {
           Location: response.url,
         },
       });
-    }
+    } else if (body.untrustedData?.address) {
+      //tx button
 
-    if (!frame || frame.status !== "success" || id === null) {
-      return new Response(html, {
+      context.cloudflare.waitUntil(
+        track({
+          kv,
+          body,
+          id,
+          nextId,
+          redirectUrl,
+        })
+      );
+
+      return new Response(response.body, {
+        status: response.status,
         headers: {
-          "Content-Type": "text/html",
+          "Content-Type":
+            response.headers.get("Content-Type") || "application/json",
+        },
+      });
+    } else {
+      //frame action button
+      const html = await response.text();
+      const frame = getFrame({ htmlString: html, url: redirectUrl });
+      if (!frame || frame.status !== "success" || id === null) {
+        return new Response(html, {
+          headers: {
+            "Content-Type": "text/html",
+          },
+        });
+      }
+
+      const res = await wrapLinksInFrame({
+        frame: frame.frame,
+        host,
+        id,
+        kv,
+      });
+
+      newFrame = res.newFrame;
+
+      //track action
+      context.cloudflare.waitUntil(
+        track({
+          kv,
+          body,
+          id,
+          nextId,
+          redirectUrl,
+          newFrame,
+        })
+      );
+
+      return new Response(getFrameHtml(newFrame), {
+        headers: {
+          "Content-Type":
+            response.headers.get("Content-Type") || "application/json",
         },
       });
     }
-
-    const { newFrame } = await wrapLinksInFrame({
-      frame: frame.frame,
-      host,
-      id,
-      kv,
-    });
-
-    const frameHtml = getFrameHtml(newFrame);
-
-    //track action
-    context.cloudflare.waitUntil(
-      track({
-        kv,
-        body,
-        id,
-        nextId,
-        redirectUrl,
-        newFrame,
-      })
-    );
-
-    return new Response(frameHtml, {
-      headers: {
-        "Content-Type":
-          response.headers.get("Content-Type") || "application/json",
-      },
-    });
   } catch (error) {
     console.error(error);
     return new Response("Internal Server Error", { status: 500 });
