@@ -25,12 +25,10 @@ interface TrackParams {
 }
 
 async function identify({
-  // message,
   body,
   apiKey,
   region,
 }: {
-  // message: FrameActionMessage;
   body: FrameActionPayload;
   apiKey: string;
   region: string;
@@ -86,14 +84,17 @@ async function track({
   const frameUrl = await kv.get(`${id}`);
   const firstFrameId = await kv.get(`${id}:firstFrame`);
   const { message, isValid } = await validateFrameMessage(body);
-  const fid = message?.data.fid;
-  const { castId, buttonIndex, inputText, network, address } =
-    body.untrustedData;
-  const castUrl = `https://warpcast.com/~/conversations/${castId.hash}`;
+  const data = message?.data;
 
-  if (!region || !apiKey || !isValid || !fid) {
+  if (!region || !apiKey || !isValid || !data || !data.fid) {
     return;
   }
+
+  const { fid } = data;
+  // const fid = message?.data.fid;
+  const { castId, buttonIndex, inputText, network, address, transactionId } =
+    body.untrustedData;
+  const castUrl = `https://warpcast.com/~/conversations/${castId.hash}`;
 
   console.log("Tracking action for: ", id, frameUrl);
 
@@ -128,7 +129,7 @@ async function track({
       region,
       apiKey,
       distinctId: fid.toString(),
-      eventName: "frame_redirect",
+      eventName: "frame_link",
       properties: {
         castHash: castId.hash,
         buttonIndex: buttonIndex.toString(),
@@ -162,7 +163,7 @@ async function track({
 
     //@ts-expect-error - resp is not used
     if (!resp?.status) console.error("Error tracking frame action", id);
-  } else if (address) {
+  } else if (data.frameActionBody.address) {
     await captureEvent({
       region,
       apiKey,
@@ -178,6 +179,7 @@ async function track({
         network,
         address,
         frameUrl,
+        transactionId,
       },
     });
   }
@@ -228,7 +230,10 @@ const actionRequest = async ({ request, context }: ActionFunctionArgs) => {
           Location: response.url,
         },
       });
-    } else if (body.untrustedData?.address) {
+    } else if (
+      body.untrustedData?.address ||
+      body.untrustedData?.transactionId
+    ) {
       //tx button
 
       context.cloudflare.waitUntil(
