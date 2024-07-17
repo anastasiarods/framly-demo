@@ -16,6 +16,7 @@ import { captureEvent, identifyUser } from "./posthog";
 
 interface TrackParams {
   kv: KVNamespace;
+  db: D1Database;
   body: FrameActionPayload;
   id: string;
   nextId: string | null;
@@ -72,6 +73,7 @@ async function identify({
 
 async function track({
   kv,
+  db,
   body,
   id,
   nextId,
@@ -79,11 +81,11 @@ async function track({
   link,
   newFrame,
 }: TrackParams) {
-  const region = await kv.get(`${id}:region`);
-  const apiKey = await kv.get(`${id}:apiKey`);
+  const api = await kv.get(`${id}:apiKey`);
+  const [apiKey, region] = api?.split(":") || [];
   const frameUrl = await kv.get(`${id}`);
-  const firstFrames = await kv.get(`${id}:firstFrame`);
-  const firstFrameIds = JSON.parse(firstFrames || "[]");
+  const firstFrame = JSON.parse((await kv.get(`${id}:firstFrame`)) || "{}");
+
   const { message, isValid } = await validateFrameMessage(body);
   const data = message?.data;
 
@@ -99,9 +101,9 @@ async function track({
   console.log("Tracking action for: ", id, frameUrl);
 
   try {
-    const session = await kv.get(`${fid}:data`);
+    const userData = await kv.get(`${fid}:data`);
 
-    if (!session) {
+    if (!userData) {
       await identify({ body, apiKey, region });
       await kv.put(`${fid}:data`, Date.now().toString());
     }
@@ -109,27 +111,39 @@ async function track({
     console.error("Error identifying user", error);
   }
 
-  let session;
+  let prevButtons;
+  const sessionId = `${id}:${fid}`;
 
   // if it is request from the first frame
-  if (firstFrameIds.includes(nextId)) {
-    session = await kv.get(`${id}:firstButtons`);
+  if (firstFrame?.ids?.includes(nextId)) {
+    prevButtons = firstFrame?.buttons;
   } else {
-    session = await kv.get(`${id}:${fid}`);
+    //@ts-expect-error - db is not used
+    const { buttons } = await db
+      .prepare(`select buttons from sessions where id = ?1;`)
+      .bind(sessionId)
+      .first();
+
+    prevButtons = JSON.parse(buttons || "[]");
   }
 
-  const prevButtons = JSON.parse(session || "[]");
   const button = prevButtons ? prevButtons[buttonIndex - 1] : null;
 
   if (newFrame && newFrame.buttons)
-    await kv.put(`${id}:${fid}`, JSON.stringify(newFrame.buttons));
+    await db
+      .prepare(
+        `insert into sessions (id, buttons) values (?1, ?2) 
+        on conflict(id) do update set buttons = excluded.buttons;`
+      )
+      .bind(sessionId, JSON.stringify(newFrame.buttons))
+      .run();
 
   if (link) {
     const resp = await captureEvent({
       region,
       apiKey,
       distinctId: fid.toString(),
-      eventName: "frame_link",
+      eventName: "frame_redirect",
       properties: {
         castHash: castId.hash,
         buttonIndex: buttonIndex.toString(),
@@ -188,6 +202,7 @@ async function track({
 const actionRequest = async ({ request, context }: ActionFunctionArgs) => {
   try {
     const kv = context.cloudflare.env.MY_KV;
+    const db = context.cloudflare.env.DB;
     const host = context.cloudflare.env.HOST_URL;
     const body: FrameActionPayload = await request.json();
     const requestUrl = new URL(request.url);
@@ -214,6 +229,7 @@ const actionRequest = async ({ request, context }: ActionFunctionArgs) => {
       //track redirect
       context.cloudflare.waitUntil(
         track({
+          db,
           kv,
           body,
           id,
@@ -242,6 +258,7 @@ const actionRequest = async ({ request, context }: ActionFunctionArgs) => {
           id,
           nextId,
           redirectUrl,
+          db,
         })
       );
 
@@ -274,6 +291,7 @@ const actionRequest = async ({ request, context }: ActionFunctionArgs) => {
       //track action
       context.cloudflare.waitUntil(
         track({
+          db,
           kv,
           body,
           id,
@@ -330,10 +348,13 @@ const loaderRequest = async ({ request, context }: LoaderFunctionArgs) => {
     const frameHtml = getFrameHtml(newFrame);
     if (newFrame.postUrl && newFrame.buttons && ids.length > 0) {
       context.cloudflare.waitUntil(
-        kv.put(`${id}:firstFrame`, JSON.stringify(ids))
-      );
-      context.cloudflare.waitUntil(
-        kv.put(`${id}:firstButtons`, JSON.stringify(newFrame.buttons))
+        kv.put(
+          `${id}:firstFrame`,
+          JSON.stringify({
+            ids: ids,
+            buttons: newFrame.buttons,
+          })
+        )
       );
     }
 

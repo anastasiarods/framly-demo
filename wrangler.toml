@@ -3,3 +3,10 @@ compatibility_flags = [ "nodejs_compat" ]
 kv_namespaces = [
   { id = "MY_KV", binding="MY_KV" }
 ]
+
+
+[[d1_databases]]
+binding = "DB"
+database_name = "database"
+database_id = "4733dcc1-f9a9-4426-aaa2-e3b836db6f3e"
+preview_database_id = "DB"

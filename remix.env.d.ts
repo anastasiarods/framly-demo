@@ -9,6 +9,7 @@ import "@cloudflare/workers-types";
 interface Env {
   HOST_URL: string;
   MY_KV: KVNamespace;
+  DB: D1Database;
 }
 
 declare module "@remix-run/cloudflare" {

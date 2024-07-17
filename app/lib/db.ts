@@ -7,14 +7,9 @@ export async function saveFrameUrl(
   region: string
 ) {
   const id = nanoid(8);
+  const api = apiKey + ":" + (region === "us" ? "us" : "eu");
+  await kv.put(id + ":apiKey", api);
   await kv.put(id, url);
-  await kv.put(id + ":apiKey", apiKey);
-
-  if (region === "us") {
-    await kv.put(id + ":region", "us");
-  } else {
-    await kv.put(id + ":region", "eu");
-  }
 
   return id;
 }
