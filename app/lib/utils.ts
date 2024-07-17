@@ -19,19 +19,21 @@ export async function wrapLinksInFrame({
   kv: KVNamespace;
 }) {
   const newFrame = { ...frame };
-  let nextId;
+  const ids: string[] = [];
 
   if (newFrame.postUrl) {
-    nextId = await getFrameUrlId(kv, newFrame.postUrl);
+    const nextId = await getFrameUrlId(kv, newFrame.postUrl);
     newFrame.postUrl = wrapUrl(host, id, nextId);
+    ids.push(nextId);
   }
 
   for (const button of newFrame.buttons ?? []) {
     if (button.target && ["post", "tx"].includes(button.action)) {
       const buttonId = await getFrameUrlId(kv, button.target);
       button.target = wrapUrl(host, id, buttonId);
+      ids.push(buttonId);
     }
   }
 
-  return { newFrame, nextId };
+  return { newFrame, ids };
 }

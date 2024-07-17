@@ -82,7 +82,8 @@ async function track({
   const region = await kv.get(`${id}:region`);
   const apiKey = await kv.get(`${id}:apiKey`);
   const frameUrl = await kv.get(`${id}`);
-  const firstFrameId = await kv.get(`${id}:firstFrame`);
+  const firstFrames = await kv.get(`${id}:firstFrame`);
+  const firstFrameIds = JSON.parse(firstFrames || "[]");
   const { message, isValid } = await validateFrameMessage(body);
   const data = message?.data;
 
@@ -91,7 +92,6 @@ async function track({
   }
 
   const { fid } = data;
-  // const fid = message?.data.fid;
   const { castId, buttonIndex, inputText, network, address, transactionId } =
     body.untrustedData;
   const castUrl = `https://warpcast.com/~/conversations/${castId.hash}`;
@@ -112,7 +112,7 @@ async function track({
   let session;
 
   // if it is request from the first frame
-  if (firstFrameId === nextId) {
+  if (firstFrameIds.includes(nextId)) {
     session = await kv.get(`${id}:firstButtons`);
   } else {
     session = await kv.get(`${id}:${fid}`);
@@ -194,7 +194,6 @@ const actionRequest = async ({ request, context }: ActionFunctionArgs) => {
     const nextId = requestUrl.searchParams.get("n");
     const id = requestUrl.searchParams.get("r");
     const redirectUrl = await kv.get(nextId ?? "");
-    let newFrame;
 
     if (!redirectUrl || !id) {
       return new Response("Invalid request", { status: 400 });
@@ -265,14 +264,12 @@ const actionRequest = async ({ request, context }: ActionFunctionArgs) => {
         });
       }
 
-      const res = await wrapLinksInFrame({
+      const { newFrame } = await wrapLinksInFrame({
         frame: frame.frame,
         host,
         id,
         kv,
       });
-
-      newFrame = res.newFrame;
 
       //track action
       context.cloudflare.waitUntil(
@@ -323,7 +320,7 @@ const loaderRequest = async ({ request, context }: LoaderFunctionArgs) => {
       });
     }
 
-    const { newFrame, nextId } = await wrapLinksInFrame({
+    const { newFrame, ids } = await wrapLinksInFrame({
       frame: respFrame.frame,
       host,
       id,
@@ -331,8 +328,10 @@ const loaderRequest = async ({ request, context }: LoaderFunctionArgs) => {
     });
 
     const frameHtml = getFrameHtml(newFrame);
-    if (newFrame.postUrl && newFrame.buttons && nextId) {
-      context.cloudflare.waitUntil(kv.put(`${id}:firstFrame`, nextId));
+    if (newFrame.postUrl && newFrame.buttons && ids.length > 0) {
+      context.cloudflare.waitUntil(
+        kv.put(`${id}:firstFrame`, JSON.stringify(ids))
+      );
       context.cloudflare.waitUntil(
         kv.put(`${id}:firstButtons`, JSON.stringify(newFrame.buttons))
       );
