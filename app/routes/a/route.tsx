@@ -13,6 +13,12 @@ import {
 import { wrapLinksInFrame } from "~/lib/utils";
 import { fetchHubContext } from "~/lib/frameUtils.server";
 import { captureEvent, identifyUser } from "./posthog";
+import {
+  getFirstFrame,
+  getLastUserButtons,
+  saveFirstFrame,
+  updateUserSession,
+} from "~/lib/db";
 
 interface TrackParams {
   kv: KVNamespace;
@@ -84,7 +90,7 @@ async function track({
   const api = await kv.get(`${id}:apiKey`);
   const [apiKey, region] = api?.split(":") || [];
   const frameUrl = await kv.get(`${id}`);
-  const firstFrame = JSON.parse((await kv.get(`${id}:firstFrame`)) || "{}");
+  const firstFrame = await getFirstFrame(db, id);
 
   const { message, isValid } = await validateFrameMessage(body);
   const data = message?.data;
@@ -112,31 +118,23 @@ async function track({
   }
 
   let prevButtons;
-  const sessionId = `${id}:${fid}`;
 
   // if it is request from the first frame
   if (firstFrame?.ids?.includes(nextId)) {
     prevButtons = firstFrame?.buttons;
   } else {
-    //@ts-expect-error - db is not used
-    const { buttons } = await db
-      .prepare(`select buttons from sessions where id = ?1;`)
-      .bind(sessionId)
-      .first();
-
-    prevButtons = JSON.parse(buttons || "[]");
+    prevButtons = await getLastUserButtons(db, id, fid.toString());
   }
 
   const button = prevButtons ? prevButtons[buttonIndex - 1] : null;
 
   if (newFrame && newFrame.buttons)
-    await db
-      .prepare(
-        `insert into sessions (id, buttons) values (?1, ?2) 
-        on conflict(id) do update set buttons = excluded.buttons;`
-      )
-      .bind(sessionId, JSON.stringify(newFrame.buttons))
-      .run();
+    await updateUserSession(
+      db,
+      id,
+      fid.toString(),
+      JSON.stringify(newFrame.buttons)
+    );
 
   if (link) {
     const resp = await captureEvent({
@@ -348,8 +346,9 @@ const loaderRequest = async ({ request, context }: LoaderFunctionArgs) => {
     const frameHtml = getFrameHtml(newFrame);
     if (newFrame.postUrl && newFrame.buttons && ids.length > 0) {
       context.cloudflare.waitUntil(
-        kv.put(
-          `${id}:firstFrame`,
+        saveFirstFrame(
+          context.cloudflare.env.DB,
+          id,
           JSON.stringify({
             ids: ids,
             buttons: newFrame.buttons,

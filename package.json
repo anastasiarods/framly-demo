@@ -6,6 +6,7 @@
   "scripts": {
     "build": "remix build",
     "dev": "remix dev --manual -c \"npm run start\"",
+    "migrations:dev": "wrangler d1 execute database --file=./dbSchema.sql --local",
     "start": "wrangler pages dev --compatibility-date=2023-06-21 ./public",
     "lint": "eslint --ignore-path .gitignore --cache --cache-location ./node_modules/.cache/eslint .",
     "typecheck": "tsc",
