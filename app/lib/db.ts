@@ -1,4 +1,18 @@
 import { nanoid } from "nanoid";
+import { FrameButton } from "frames.js";
+
+interface UserSession {
+  id: string;
+  value: FrameButton[];
+}
+
+interface FirstFrame {
+  id: string;
+  value: {
+    ids: string[];
+    buttons: FrameButton[];
+  };
+}
 
 export async function saveFrameUrl(
   kv: KVNamespace,
@@ -32,24 +46,22 @@ export async function getFrameUrlId(kv: KVNamespace, url: string) {
   return id;
 }
 
-export async function getLastUserButtons(
-  db: D1Database,
-  id: string,
-  fid: string
-) {
+export async function getUserSession(db: D1Database, id: string, fid: string) {
   const sessionId = `${id}:${fid}`;
-  //@ts-expect-error - db is used
-  const { value } = await db
-    .prepare(`select value from sessions where id = ?1;`)
+  const res: { id: string; value: string } | undefined | null = await db
+    .prepare(`select * from sessions where id = ?1;`)
     .bind(sessionId)
     .first();
 
-  if (!value) return undefined;
+  if (!res) return undefined;
 
-  return JSON.parse(value);
+  return {
+    id: res.id,
+    value: JSON.parse(res.value),
+  } as UserSession;
 }
 
-export async function updateUserSession(
+export async function upsertUserSession(
   db: D1Database,
   id: string,
   fid: string,
@@ -67,18 +79,20 @@ export async function updateUserSession(
 }
 
 export async function getFirstFrame(db: D1Database, id: string) {
-  //@ts-expect-error - db is used
-  const { value } = await db
-    .prepare(`select value from sessions where id = ?1;`)
+  const res: { id: string; value: string } | undefined | null = await db
+    .prepare(`select * from sessions where id = ?1;`)
     .bind(id)
     .first();
 
-  if (!value) return undefined;
+  if (!res) return undefined;
 
-  return JSON.parse(value);
+  return {
+    id: res.id,
+    value: JSON.parse(res.value),
+  } as FirstFrame;
 }
 
-export async function saveFirstFrame(
+export async function upsertFirstFrame(
   db: D1Database,
   id: string,
   frame: string

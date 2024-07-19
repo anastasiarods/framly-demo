@@ -14,7 +14,7 @@ export async function captureEvent({
   properties: Record<string, any>;
   apiKey: string;
   region: string;
-}) {
+}): Promise<{ status: string }> {
   const url = `${region === "us" ? usEndpoint : euEndpoint}/capture/`;
   const body = {
     api_key: apiKey,

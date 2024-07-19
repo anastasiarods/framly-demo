@@ -15,9 +15,9 @@ import { fetchHubContext } from "~/lib/frameUtils.server";
 import { captureEvent, identifyUser } from "./posthog";
 import {
   getFirstFrame,
-  getLastUserButtons,
-  saveFirstFrame,
-  updateUserSession,
+  getUserSession,
+  upsertFirstFrame,
+  upsertUserSession,
 } from "~/lib/db";
 
 interface TrackParams {
@@ -120,16 +120,16 @@ async function track({
   let prevButtons;
 
   // if it is request from the first frame
-  if (firstFrame?.ids?.includes(nextId)) {
-    prevButtons = firstFrame?.buttons;
+  if (firstFrame?.value?.ids?.includes(nextId || "")) {
+    prevButtons = firstFrame?.value?.buttons;
   } else {
-    prevButtons = await getLastUserButtons(db, id, fid.toString());
+    prevButtons = (await getUserSession(db, id, fid.toString()))?.value;
   }
 
   const button = prevButtons ? prevButtons[buttonIndex - 1] : null;
 
   if (newFrame && newFrame.buttons)
-    await updateUserSession(
+    await upsertUserSession(
       db,
       id,
       fid.toString(),
@@ -146,7 +146,7 @@ async function track({
         castHash: castId.hash,
         buttonIndex: buttonIndex.toString(),
         buttonLabel: button?.label,
-        postUrl: redirectUrl,
+        pageUrl: redirectUrl,
         castUrl,
         frameUrl,
         redirectUrl: link,
@@ -154,7 +154,6 @@ async function track({
       },
     });
 
-    //@ts-expect-error - resp is not used
     if (!resp?.status) console.error("Error tracking external link", id);
   } else if (newFrame) {
     const resp = await captureEvent({
@@ -166,14 +165,15 @@ async function track({
         castHash: castId.hash,
         buttonIndex: buttonIndex.toString(),
         buttonLabel: button?.label,
-        postUrl: redirectUrl,
+        pageUrl: redirectUrl,
         castUrl,
         inputText,
         frameUrl,
       },
     });
 
-    //@ts-expect-error - resp is not used
+    console.log("resp", resp);
+
     if (!resp?.status) console.error("Error tracking frame action", id);
   } else if (data.frameActionBody.address) {
     await captureEvent({
@@ -185,7 +185,7 @@ async function track({
         castHash: castId.hash,
         buttonIndex: buttonIndex.toString(),
         buttonLabel: button?.label,
-        postUrl: redirectUrl,
+        pageUrl: redirectUrl,
         castUrl,
         inputText,
         network,
@@ -248,7 +248,6 @@ const actionRequest = async ({ request, context }: ActionFunctionArgs) => {
       body.untrustedData?.transactionId
     ) {
       //tx button
-
       context.cloudflare.waitUntil(
         track({
           kv,
@@ -346,7 +345,7 @@ const loaderRequest = async ({ request, context }: LoaderFunctionArgs) => {
     const frameHtml = getFrameHtml(newFrame);
     if (newFrame.postUrl && newFrame.buttons && ids.length > 0) {
       context.cloudflare.waitUntil(
-        saveFirstFrame(
+        upsertFirstFrame(
           context.cloudflare.env.DB,
           id,
           JSON.stringify({
