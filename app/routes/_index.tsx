@@ -126,8 +126,50 @@ export default function Index() {
     <div className="flex flex-col items-center justify-start min-h-screen bg-gray-100 p-4">
       <div className="w-full max-w-md space-y-8 bg-white rounded-xl shadow-md p-8 mb-8">
         <h1 className="text-2xl font-bold text-center text-gray-900">
-          No-code Frame Analytics
+          No-Code Frames Analytics in PostHog.com
         </h1>
+        <div className="text-sm text-gray-700 mb-4 space-y-4">
+          <p>
+            This is an open-source demo project (
+            <a
+              href="https://github.com/anastasiarods/framly-demo"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-500 underline"
+            >
+              GitHub Repository
+            </a>
+            ) that you can already use to wrap any Frame link and get analytics
+            in the PostHog tool.
+          </p>
+          <ol className="list-decimal list-inside pl-4">
+            <li>Paste a Frame URL.</li>
+            <li>Enter your PostHog Project API key.</li>
+            <li>Press Submit and share the new URL on warpcast.com.</li>
+          </ol>
+          <p>
+            You’ll receive analytics events when users interact with your Frame
+            directly in PostHog. Check out this demo:{" "}
+            <a
+              href="https://warpcast.com/nastya/0xe2038b924e844a95e0d364bd264553bb2ec318db"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-500 underline"
+            >
+              Demo Link
+            </a>
+            . Contact me on Farcaster with any questions (
+            <a
+              href="https://warpcast.com/nastya"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-500 underline"
+            >
+              @Nastya 
+            </a>
+            ) or raise a GitHub issue.
+          </p>
+        </div>
         <Form method="post" className="space-y-6">
           <div>
             <label
