@@ -6,12 +6,7 @@ import {
   ActionFunctionArgs,
 } from "@remix-run/cloudflare";
 import { saveFrameUrl } from "~/lib/db";
-import { wrapUrl } from "~/lib/utils";
-
-function isValidUrl(url: string) {
-  const urlPattern = /^https:\/\/([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/;
-  return urlPattern.test(url);
-}
+import { isValidUrl, wrapUrl } from "~/lib/utils";
 
 export const action: ActionFunction = async ({
   request,
@@ -21,23 +16,23 @@ export const action: ActionFunction = async ({
   const { HOST_URL } = context.cloudflare.env;
 
   const formData = await request.formData();
-  const url = formData.get("functionUrl")?.toString();
+  const frameUrl = formData.get("frameUrl")?.toString();
   const apiKey = formData.get("apiKey")?.toString();
-  const checkbox = formData.get("check")?.toString();
+  const checkbox = formData.get("euRegion")?.toString();
 
-  if (!url || !apiKey) {
+  if (!frameUrl || !apiKey) {
     return json({ message: "Missing required fields" }, { status: 400 });
   }
 
-  if (!isValidUrl(url)) {
+  if (!frameUrl || !isValidUrl(frameUrl)) {
     return json({ message: "Invalid URL" }, { status: 400 });
   }
 
-  const region = checkbox === "on" ? "eu" : "us";
-  const id = await saveFrameUrl(kv, url, apiKey, region);
+  const region = checkbox === "true" ? "eu" : "us";
+  const id = await saveFrameUrl(kv, frameUrl, apiKey, region);
   const newUrl = wrapUrl(HOST_URL, id);
 
-  console.log("New URL created for", url, newUrl.toString());
+  console.log("New URL created for", frameUrl, newUrl.toString());
 
   return json({
     url: newUrl.toString(),
@@ -173,18 +168,18 @@ export default function Index() {
         <Form method="post" className="space-y-6">
           <div>
             <label
-              htmlFor="functionUrl"
+              htmlFor="frameUrl"
               className="block text-sm font-medium text-gray-700"
             >
               Frame URL
             </label>
             <input
-              id="functionUrl"
+              id="frameUrl"
               type="text"
-              name="functionUrl"
+              name="frameUrl"
               value={inputUrl}
               onChange={(e) => setInputUrl(e.target.value)}
-              placeholder="Enter function URL"
+              placeholder="Enter Frame URL"
               required
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
             />
@@ -208,11 +203,11 @@ export default function Index() {
             />
           </div>
           <div className="mt-4">
-            <label htmlFor="check" className="flex items-center">
+            <label htmlFor="euRegion" className="flex items-center">
               <input
-                id="check"
+                id="euRegion"
                 type="checkbox"
-                name="check"
+                name="euRegion"
                 checked={inputChecked} // Assuming you have a state variable `termsChecked`
                 onChange={(e) => setInputChecked(e.target.checked)} // Assuming you have a handler `setTermsChecked`
                 className="mr-2"

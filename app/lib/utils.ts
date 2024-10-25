@@ -1,6 +1,11 @@
 import { Frame } from "frames.js";
 import { getFrameUrlId } from "./db";
 
+export function isValidUrl(url: string) {
+  const urlPattern = /^https:\/\/([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/;
+  return urlPattern.test(url);
+}
+
 export function wrapUrl(analyticsDomain: string, id: string, nextId?: string) {
   if (nextId) return `${analyticsDomain}/a/?r=${id}&n=${nextId}`;
 
